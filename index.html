@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Realms of Aethermoor</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Georgia', serif; color: #fff; }
+    #canvas { display: block; }
+
+    /* ── HUD ─────────────────────────────────────────────────── */
+    #hud { position: fixed; inset: 0; pointer-events: none; }
+
+    /* Bottom gradient — makes bars readable */
+    #hud::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 180px;
+      background: linear-gradient(to top, rgba(0,0,0,0.55), transparent);
+    }
+
+    /* Overall vignette */
+    #vignette {
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.45) 100%);
+      pointer-events: none;
+    }
+
+    /* ── Compass ─────────────────────────────────────────────── */
+    #compass {
+      position: absolute;
+      top: 18px; left: 50%;
+      transform: translateX(-50%);
+      width: 300px; height: 26px;
+      background: rgba(0,0,0,0.40);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    #compass-strip {
+      position: absolute;
+      top: 0; height: 100%;
+      width: 900px; /* 3 reps × 300px */
+    }
+    #compass-center {
+      position: absolute; top: 0; bottom: 0;
+      left: 50%; transform: translateX(-50%);
+      width: 2px;
+      background: rgba(245,158,11,0.85);
+    }
+    #location-name {
+      position: absolute;
+      top: 52px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 12px;
+      color: rgba(255,220,130,0.80);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      text-shadow: 0 0 10px rgba(245,158,11,0.35);
+    }
+    #time-display {
+      position: absolute;
+      top: 18px; right: 22px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.50);
+      letter-spacing: 2px;
+      text-shadow: 0 0 6px rgba(0,0,0,0.5);
+    }
+    #weather-display {
+      position: absolute;
+      top: 34px; right: 22px;
+      font-size: 9px;
+      color: rgba(255,255,255,0.30);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    /* ── Ammo HUD ────────────────────────────────────────────── */
+    #ammo-display {
+      position: absolute;
+      bottom: 72px; right: 22px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.65);
+      letter-spacing: 1px;
+      text-shadow: 0 0 6px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 5;
+    }
+    #ammo-display .ammo-count {
+      font-size: 22px;
+      font-weight: bold;
+      color: rgba(255,255,255,0.85);
+    }
+    #ammo-display .ammo-label {
+      font-size: 10px;
+      color: rgba(255,255,255,0.45);
+      text-transform: uppercase;
+    }
+
+    /* ── Draw Strength Indicator ─────────────────────────────── */
+    #draw-indicator {
+      position: absolute;
+      bottom: 50%; left: 50%;
+      transform: translate(18px, 0);
+      width: 4px;
+      height: 40px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 2px;
+      display: none;
+      z-index: 5;
+    }
+    #draw-fill {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: rgba(255,200,50,0.85);
+      border-radius: 2px;
+      transition: height 0.05s linear;
+    }
+
+    /* ── Crosshair ───────────────────────────────────────────── */
+    #crosshair {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    #crosshair::before, #crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(255,255,255,0.75);
+    }
+    #crosshair::before { /* horizontal */
+      width: 10px; height: 1.5px;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    #crosshair::after { /* vertical */
+      width: 1.5px; height: 10px;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    #crosshair-dot {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 3px; height: 3px;
+      background: rgba(255,255,255,0.9);
+      border-radius: 50%;
+    }
+
+    /* ── Resource Bars ───────────────────────────────────────── */
+    #bars {
+      position: absolute;
+      bottom: 28px; left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      z-index: 1;
+    }
+    .bar-group {
+      display: flex; flex-direction: column; gap: 4px; align-items: center;
+    }
+    .bar-label {
+      font-size: 9px;
+      color: rgba(255,255,255,0.50);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .bar-track {
+      width: 140px; height: 10px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.15s linear;
+    }
+    #hp-fill { background: linear-gradient(90deg, #7f1d1d, #dc2626); }
+    #sp-fill { background: linear-gradient(90deg, #14532d, #16a34a); }
+    #mp-fill { background: linear-gradient(90deg, #1e3a8a, #3b82f6); }
+
+    /* ── XP Bar & Level Badge ──────────────────────────────────── */
+    #xp-bar-wrap {
+      position: absolute;
+      bottom: 66px; left: 50%;
+      transform: translateX(-50%);
+      display: flex; align-items: center; gap: 6px;
+      z-index: 1;
+    }
+    #level-badge {
+      font-size: 11px; color: rgba(245,158,11,0.85);
+      letter-spacing: 1px; min-width: 32px; text-align: center;
+    }
+    #xp-track {
+      width: 200px; height: 5px;
+      background: rgba(0,0,0,0.50);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 2px; overflow: hidden;
+    }
+    #xp-fill {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, #b45309, #f59e0b);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+    #xp-text {
+      font-size: 8px; color: rgba(255,255,255,0.30);
+      letter-spacing: 1px; min-width: 60px;
+    }
+
+    /* ── Level-Up Panel ──────────────────────────────────────── */
+    #levelup-overlay {
+      position: fixed; inset: 0;
+      background: rgba(10,8,5,0.90);
+      z-index: 150;
+      display: none;
+      font-family: Georgia, serif;
+      color: #ddd;
+    }
+    #levelup-container {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 420px; max-width: 90vw;
+      text-align: center;
+    }
+    #levelup-title {
+      font-size: 22px; letter-spacing: 6px; color: rgba(245,158,11,0.90);
+      text-transform: uppercase; margin-bottom: 4px;
+    }
+    #levelup-subtitle {
+      font-size: 11px; color: rgba(255,255,255,0.40);
+      letter-spacing: 2px; margin-bottom: 18px;
+    }
+    #levelup-points {
+      font-size: 12px; color: rgba(245,158,11,0.75);
+      letter-spacing: 2px; margin-bottom: 14px;
+    }
+    #levelup-stats {
+      display: flex; flex-direction: column; gap: 6px;
+      margin-bottom: 18px;
+    }
+    .levelup-row {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+    }
+    .levelup-stat-name {
+      width: 100px; text-align: right;
+      font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+      color: rgba(255,255,255,0.55);
+    }
+    .levelup-stat-val {
+      width: 30px; text-align: center;
+      font-size: 14px; color: rgba(255,255,255,0.85);
+    }
+    .levelup-stat-desc {
+      width: 160px; text-align: left;
+      font-size: 8px; color: rgba(255,255,255,0.30);
+      letter-spacing: 1px;
+    }
+    .levelup-plus {
+      width: 24px; height: 24px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.60);
+      font-family: Georgia, serif; font-size: 14px;
+      cursor: pointer; border-radius: 2px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .levelup-plus:hover { border-color: rgba(245,158,11,0.50); color: #f59e0b; }
+    .levelup-plus:disabled { opacity: 0.2; cursor: default; }
+    #levelup-done {
+      padding: 7px 28px;
+      background: transparent;
+      border: 1px solid rgba(245,158,11,0.50);
+      color: rgba(245,158,11,0.80);
+      font-family: Georgia, serif; font-size: 11px;
+      letter-spacing: 3px; text-transform: uppercase;
+      cursor: pointer; border-radius: 2px;
+    }
+    #levelup-done:hover { background: rgba(245,158,11,0.10); color: #f59e0b; }
+    #levelup-done:disabled { opacity: 0.3; cursor: default; }
+
+    /* ── Hand Icons ──────────────────────────────────────────── */
+    .hand-icon {
+      position: absolute;
+      bottom: 72px;
+      font-size: 10px;
+      color: rgba(255,255,255,0.40);
+      letter-spacing: 1px;
+      text-align: center;
+      line-height: 1.5;
+      z-index: 1;
+    }
+    #hand-left  { left: 28px; }
+    #hand-right { right: 28px; }
+
+    /* ── Sprint Indicator ────────────────────────────────────── */
+    #sprint-indicator {
+      position: absolute;
+      bottom: 50px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 9px;
+      color: rgba(255,255,255,0.30);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 1;
+    }
+    #sprint-indicator.active { opacity: 1; color: rgba(180,220,180,0.55); }
+
+    /* ── Interact Prompt ─────────────────────────────────────── */
+    #interact-prompt {
+      position: absolute;
+      top: calc(50% + 20px); left: 50%;
+      transform: translateX(-50%);
+      font-size: 12px;
+      color: rgba(255,230,150,0.85);
+      letter-spacing: 2px;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+
+    /* ── Start Overlay ───────────────────────────────────────── */
+    #overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.88);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+    #overlay h1 {
+      font-size: 48px;
+      letter-spacing: 8px;
+      color: #f59e0b;
+      text-shadow: 0 0 30px rgba(245,158,11,0.45);
+      margin-bottom: 8px;
+    }
+    #overlay .subtitle {
+      font-size: 12px;
+      color: rgba(255,255,255,0.40);
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      margin-bottom: 48px;
+    }
+    #start-btn {
+      padding: 13px 44px;
+      background: transparent;
+      border: 1px solid rgba(245,158,11,0.65);
+      color: #f59e0b;
+      font-size: 14px;
+      font-family: Georgia, serif;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    #start-btn:hover {
+      background: rgba(245,158,11,0.12);
+      border-color: #f59e0b;
+    }
+    .controls-hint {
+      margin-top: 36px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.25);
+      letter-spacing: 2px;
+      text-align: center;
+      line-height: 2;
+    }
+    .controls-hint span { color: rgba(255,255,255,0.45); }
+
+    /* ── Pause Overlay ───────────────────────────────────────── */
+    #pause-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.60);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 150;
+    }
+    #pause-overlay h2 {
+      font-size: 28px;
+      letter-spacing: 6px;
+      color: rgba(255,255,255,0.75);
+      margin-bottom: 12px;
+    }
+    #pause-overlay p {
+      font-size: 12px;
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 3px;
+    }
+    .pause-buttons {
+      display: flex; gap: 12px; margin-top: 18px;
+    }
+    .pause-btn {
+      padding: 8px 28px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.60);
+      font-family: Georgia, serif; font-size: 11px;
+      letter-spacing: 2px; text-transform: uppercase;
+      cursor: pointer; border-radius: 2px;
+    }
+    .pause-btn:hover { border-color: rgba(245,158,11,0.50); color: #f59e0b; }
+    #save-status {
+      font-size: 10px; color: rgba(100,255,100,0.6);
+      letter-spacing: 2px; margin-top: 10px; height: 16px;
+    }
+    /* Start screen continue button */
+    #continue-btn {
+      display: none;
+      margin-top: 12px;
+      padding: 12px 42px;
+      background: rgba(245,158,11,0.08);
+      border: 1px solid rgba(245,158,11,0.35);
+      color: rgba(245,158,11,0.85);
+      font-family: Georgia, serif; font-size: 14px;
+      letter-spacing: 6px; text-transform: uppercase;
+      cursor: pointer;
+    }
+    #continue-btn:hover { background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.55); }
+    #continue-info {
+      font-size: 10px; color: rgba(255,255,255,0.30);
+      letter-spacing: 2px; margin-top: 6px;
+    }
+
+    /* ── Damage Flash ────────────────────────────────────────── */
+    #damage-flash {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 50;
+      opacity: 0;
+      background: radial-gradient(ellipse at center, transparent 30%, rgba(180,0,0,0.55) 100%);
+      transition: opacity 0.08s ease-in;
+    }
+    #damage-flash.flash { opacity: 1; }
+
+    /* ── Hit Marker ──────────────────────────────────────────── */
+    #hit-marker {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 50;
+      opacity: 0;
+      font-size: 22px;
+      color: rgba(255,80,80,0.9);
+      transition: opacity 0.05s;
+    }
+    #hit-marker.show { opacity: 1; }
+
+    /* ── Kill Feed ───────────────────────────────────────────── */
+    #kill-feed {
+      position: fixed;
+      top: 80px; right: 24px;
+      pointer-events: none;
+      z-index: 50;
+      font-size: 11px;
+      color: rgba(255,200,100,0.80);
+      letter-spacing: 2px;
+      text-align: right;
+    }
+
+    /* ── Hotbar ──────────────────────────────────────────────── */
+    #hotbar {
+      position: absolute;
+      bottom: 88px; left: 50%;
+      transform: translateX(-50%);
+      display: flex; gap: 6px;
+      z-index: 2;
+    }
+    .hb-slot {
+      width: 44px; height: 44px;
+      background: rgba(0,0,0,0.50);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 3px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-size: 8px; color: rgba(255,255,255,0.35);
+      letter-spacing: 1px;
+    }
+    .hb-slot.hb-filled { border-color: rgba(255,255,255,0.30); }
+    .hb-slot .hb-key { font-size: 12px; color: rgba(255,255,255,0.25); }
+    .hb-slot .hb-name { font-size: 7px; color: rgba(255,200,100,0.75); }
+    .hb-slot .hb-count { font-size: 8px; color: rgba(255,255,255,0.40); }
+
+    /* ── Loot Popup ──────────────────────────────────────────── */
+    #loot-popup {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(15,10,5,0.92);
+      border: 1px solid rgba(255,200,100,0.25);
+      border-radius: 4px;
+      padding: 16px 24px;
+      min-width: 180px;
+      z-index: 100;
+      display: none;
+      font-size: 12px;
+    }
+    #loot-popup h3 {
+      color: rgba(255,200,100,0.85);
+      font-size: 11px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    .loot-item {
+      padding: 3px 0;
+      font-size: 11px;
+    }
+    #loot-popup .loot-close {
+      display: block;
+      margin: 12px auto 0;
+      padding: 4px 16px;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.6);
+      font-family: Georgia, serif;
+      font-size: 10px;
+      letter-spacing: 2px;
+      cursor: pointer;
+    }
+
+    /* ── Unified Menu Overlay ────────────────────────────────── */
+    #menu-overlay {
+      position: fixed; inset: 0;
+      background: rgba(10,8,5,0.88);
+      z-index: 100;
+      display: none;
+      font-family: Georgia, serif;
+      color: #ddd;
+    }
+    #menu-container {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 720px; max-width: 92vw;
+      height: 520px; max-height: 88vh;
+      display: flex; flex-direction: column;
+    }
+    #menu-tab-bar {
+      display: flex; gap: 4px; margin-bottom: 12px;
+    }
+    .menu-tab {
+      padding: 7px 20px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 3px 3px 0 0;
+      font-size: 11px; color: rgba(255,255,255,0.40);
+      letter-spacing: 3px; text-transform: uppercase;
+      cursor: pointer; font-family: Georgia, serif;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .menu-tab:hover { border-color: rgba(255,255,255,0.25); color: rgba(255,255,255,0.60); }
+    .menu-tab-active { border-color: rgba(245,158,11,0.55); color: rgba(245,158,11,0.85); background: rgba(245,158,11,0.06); }
+    .menu-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+    .menu-panel-active { display: flex; }
+
+    /* ── Inventory Panel ─────────────────────────────────────── */
+    #inv-container {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    }
+    #inv-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    #inv-header h2 {
+      font-size: 18px; letter-spacing: 5px; color: rgba(255,200,100,0.85);
+      text-transform: uppercase; margin: 0;
+    }
+    #inv-meta { font-size: 10px; color: rgba(255,255,255,0.45); letter-spacing: 1px; }
+    #inv-meta span { color: rgba(245,158,11,0.80); }
+
+    /* Tabs */
+    #inv-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+    .inv-tab {
+      padding: 5px 12px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 2px;
+      font-size: 10px; color: rgba(255,255,255,0.45);
+      letter-spacing: 2px; text-transform: uppercase;
+      cursor: pointer;
+      font-family: Georgia, serif;
+    }
+    .inv-tab:hover { border-color: rgba(255,255,255,0.20); }
+    .inv-tab-active { border-color: rgba(245,158,11,0.50); color: rgba(245,158,11,0.80); }
+
+    /* Body — three columns */
+    #inv-body { display: flex; gap: 12px; flex: 1; overflow: hidden; }
+
+    /* Item list */
+    #inv-item-list {
+      flex: 1; overflow-y: auto;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 2px;
+      padding: 4px;
+    }
+    .inv-item {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 8px;
+      cursor: pointer;
+      border-radius: 2px;
+      border: 1px solid transparent;
+    }
+    .inv-item:hover { background: rgba(255,255,255,0.05); }
+    .inv-item-selected { background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.30); }
+    .inv-item-name { flex: 1; font-size: 11px; }
+    .inv-item-count { font-size: 9px; color: rgba(255,255,255,0.35); }
+    .inv-eq-tag {
+      font-size: 8px; color: rgba(100,255,100,0.7);
+      border: 1px solid rgba(100,255,100,0.3);
+      border-radius: 2px; padding: 0 3px; line-height: 1.4;
+    }
+    .inv-empty { text-align: center; padding: 20px; color: rgba(255,255,255,0.25); font-size: 11px; }
+
+    /* Detail panel */
+    #inv-detail {
+      width: 220px;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 2px;
+      padding: 12px;
+      overflow-y: auto;
+    }
+    .inv-detail-empty { color: rgba(255,255,255,0.25); font-size: 11px; text-align: center; padding-top: 20px; }
+    .inv-detail-name { font-size: 14px; margin-bottom: 2px; }
+    .inv-detail-rarity { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
+    .inv-detail-type { font-size: 9px; color: rgba(255,255,255,0.35); letter-spacing: 1px; margin-bottom: 8px; }
+    .inv-detail-desc { font-size: 10px; color: rgba(255,255,255,0.55); line-height: 1.5; margin-bottom: 10px; }
+    .inv-stat { font-size: 10px; color: rgba(255,255,255,0.50); padding: 2px 0; }
+    .inv-detail-stats { margin-bottom: 12px; }
+    .inv-detail-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+    .inv-btn {
+      padding: 4px 12px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.65);
+      font-family: Georgia, serif; font-size: 10px;
+      letter-spacing: 1px; cursor: pointer; border-radius: 2px;
+    }
+    .inv-btn:hover { border-color: rgba(245,158,11,0.50); color: #f59e0b; }
+    .inv-btn-sm { padding: 4px 6px; font-size: 9px; }
+    .inv-btn-drop { border-color: rgba(180,0,0,0.30); color: rgba(200,100,100,0.6); }
+    .inv-btn-drop:hover { border-color: rgba(220,0,0,0.5); color: #dc2626; }
+
+    /* Equipment sidebar */
+    #inv-equip-list {
+      width: 160px;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 2px;
+      padding: 8px;
+    }
+    .inv-equip-slot { padding: 5px 4px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .inv-equip-label { font-size: 8px; color: rgba(255,255,255,0.30); letter-spacing: 2px; text-transform: uppercase; display: block; }
+    .inv-equip-name { font-size: 10px; }
+
+    /* ── Dialogue Panel ─────────────────────────────────────── */
+    #dialogue-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 100;
+      display: none;
+    }
+    #dialogue-panel {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: linear-gradient(to top, rgba(10,8,5,0.95), rgba(10,8,5,0.80));
+      border-top: 1px solid rgba(255,200,100,0.20);
+      padding: 24px 40px 28px;
+      font-family: Georgia, serif;
+    }
+    #dialogue-speaker {
+      font-size: 13px;
+      color: rgba(245,158,11,0.90);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    #dialogue-text {
+      font-size: 14px;
+      color: rgba(255,255,255,0.80);
+      line-height: 1.7;
+      max-width: 700px;
+      margin-bottom: 16px;
+    }
+    #dialogue-options {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 500px;
+    }
+    .dialogue-option {
+      padding: 8px 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 3px;
+      color: rgba(255,255,255,0.70);
+      font-family: Georgia, serif;
+      font-size: 12px;
+      cursor: pointer;
+      text-align: left;
+      letter-spacing: 0.5px;
+    }
+    .dialogue-option:hover {
+      background: rgba(245,158,11,0.10);
+      border-color: rgba(245,158,11,0.40);
+      color: #f59e0b;
+    }
+
+    /* ── Shop Panel ──────────────────────────────────────────── */
+    #shop-overlay {
+      position: fixed; inset: 0;
+      background: rgba(10,8,5,0.88);
+      z-index: 100;
+      display: none;
+    }
+    #shop-container {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 600px; max-width: 92vw;
+      max-height: 80vh;
+      display: flex; flex-direction: column;
+    }
+    #shop-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    #shop-header h2 {
+      font-size: 18px; letter-spacing: 5px; color: rgba(245,158,11,0.85);
+      text-transform: uppercase; margin: 0;
+    }
+    #shop-gold { font-size: 11px; color: rgba(245,158,11,0.70); letter-spacing: 1px; }
+    #shop-tabs {
+      display: flex; gap: 4px; margin-bottom: 8px;
+    }
+    .shop-tab {
+      padding: 5px 14px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 2px;
+      font-size: 10px; color: rgba(255,255,255,0.45);
+      letter-spacing: 2px; text-transform: uppercase;
+      cursor: pointer; font-family: Georgia, serif;
+    }
+    .shop-tab:hover { border-color: rgba(255,255,255,0.20); }
+    .shop-tab-active { border-color: rgba(245,158,11,0.50); color: rgba(245,158,11,0.80); }
+    #shop-items {
+      flex: 1; overflow-y: auto;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 2px;
+      padding: 6px;
+    }
+    .shop-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .shop-item:hover { background: rgba(255,255,255,0.03); }
+    .shop-item-name { flex: 1; font-size: 12px; }
+    .shop-item-info { font-size: 9px; color: rgba(255,255,255,0.35); min-width: 80px; }
+    .shop-item-price { font-size: 11px; color: rgba(245,158,11,0.70); min-width: 50px; text-align: right; }
+    .shop-buy-btn, .shop-sell-btn {
+      padding: 3px 10px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.60);
+      font-family: Georgia, serif; font-size: 9px;
+      letter-spacing: 1px; cursor: pointer; border-radius: 2px;
+    }
+    .shop-buy-btn:hover { border-color: rgba(245,158,11,0.50); color: #f59e0b; }
+    .shop-sell-btn { border-color: rgba(100,200,100,0.30); color: rgba(100,200,100,0.6); }
+    .shop-sell-btn:hover { border-color: rgba(100,255,100,0.5); color: #22cc66; }
+    #shop-close-btn {
+      display: block; margin: 12px auto 0; padding: 6px 24px;
+      background: transparent; border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.5); font-family: Georgia, serif;
+      font-size: 10px; letter-spacing: 2px; cursor: pointer;
+    }
+    #shop-close-btn:hover { border-color: rgba(255,255,255,0.35); color: #fff; }
+
+    /* ── Character Panel ──────────────────────────────────────── */
+    #char-container {
+      flex: 1; display: flex; gap: 16px; overflow: hidden;
+    }
+    #char-info {
+      width: 240px;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 2px; padding: 14px;
+      overflow-y: auto;
+    }
+    #char-stats {
+      flex: 1;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 2px; padding: 14px;
+      overflow-y: auto;
+    }
+    .char-section {
+      font-size: 9px; color: rgba(255,200,100,0.60);
+      letter-spacing: 2px; text-transform: uppercase;
+      margin: 12px 0 6px; padding-bottom: 3px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .char-section:first-child { margin-top: 0; }
+    .char-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 3px 0; font-size: 11px;
+    }
+    .char-label { color: rgba(255,255,255,0.50); }
+    .char-val { color: rgba(255,255,255,0.85); }
+    .char-val-gold { color: rgba(245,158,11,0.85); }
+    .char-stat-row {
+      display: flex; align-items: center; gap: 8px; padding: 4px 0;
+    }
+    .char-stat-name {
+      width: 90px; font-size: 10px; color: rgba(255,255,255,0.50);
+      letter-spacing: 1px; text-transform: uppercase;
+    }
+    .char-stat-val { font-size: 13px; color: rgba(255,255,255,0.85); width: 28px; text-align: center; }
+    .char-plus {
+      width: 20px; height: 20px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.60);
+      font-family: Georgia, serif; font-size: 12px;
+      cursor: pointer; border-radius: 2px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .char-plus:hover { border-color: rgba(245,158,11,0.50); color: #f59e0b; }
+    .char-plus:disabled { opacity: 0; pointer-events: none; }
+    .char-pts {
+      font-size: 10px; color: rgba(245,158,11,0.75);
+      letter-spacing: 1px; margin-bottom: 6px;
+    }
+
+    /* ── Quest Panel ─────────────────────────────────────────── */
+    #quest-container {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    }
+    #quest-header h2 {
+      font-size: 18px; letter-spacing: 5px; color: rgba(245,158,11,0.85);
+      text-transform: uppercase; margin: 0 0 10px;
+    }
+    #quest-body { display: flex; gap: 12px; flex: 1; overflow: hidden; }
+    #quest-list {
+      width: 220px; overflow-y: auto;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 2px; padding: 4px;
+    }
+    .quest-item {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 8px; cursor: pointer; border-radius: 2px;
+      border: 1px solid transparent;
+    }
+    .quest-item:hover { background: rgba(255,255,255,0.05); }
+    .quest-item-selected { background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.30); }
+    .quest-item-done { opacity: 0.5; }
+    .quest-item-name { font-size: 11px; flex: 1; }
+    .quest-tracked-tag { color: #f59e0b; font-size: 10px; }
+    .quest-empty { text-align: center; padding: 20px; color: rgba(255,255,255,0.25); font-size: 11px; }
+    #quest-detail {
+      flex: 1; overflow-y: auto;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 2px; padding: 14px;
+    }
+    .quest-detail-type { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; }
+    .quest-detail-title { font-size: 16px; color: rgba(255,255,255,0.85); margin-bottom: 4px; }
+    .quest-detail-giver { font-size: 10px; color: rgba(255,255,255,0.35); margin-bottom: 10px; }
+    .quest-detail-desc { font-size: 11px; color: rgba(255,255,255,0.55); line-height: 1.6; margin-bottom: 12px; }
+    .quest-detail-section { font-size: 9px; color: rgba(255,200,100,0.60); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; }
+    .quest-btn {
+      padding: 4px 14px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.60);
+      font-family: Georgia, serif; font-size: 10px;
+      letter-spacing: 1px; cursor: pointer; border-radius: 2px;
+    }
+    .quest-btn:hover { border-color: rgba(245,158,11,0.50); color: #f59e0b; }
+
+    /* ── Magic Panel ──────────────────────────────────────────── */
+    #magic-container {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    }
+    #magic-header h2 {
+      font-size: 18px; letter-spacing: 5px; color: rgba(245,158,11,0.85);
+      text-transform: uppercase; margin: 0 0 10px;
+    }
+    #magic-body { display: flex; gap: 12px; flex: 1; overflow: hidden; }
+    #magic-spell-list {
+      width: 220px; overflow-y: auto;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 2px; padding: 4px;
+    }
+    .magic-spell-item {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 8px; cursor: pointer; border-radius: 2px;
+      border: 1px solid transparent;
+    }
+    .magic-spell-item:hover { background: rgba(255,255,255,0.05); }
+    .magic-spell-item-selected { background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.30); }
+    .magic-spell-name { font-size: 11px; flex: 1; }
+    .magic-spell-school { font-size: 8px; color: rgba(255,255,255,0.30); letter-spacing: 1px; text-transform: uppercase; }
+    .magic-equipped-tag { font-size: 8px; color: rgba(100,200,255,0.7); border: 1px solid rgba(100,200,255,0.3); border-radius: 2px; padding: 0 3px; line-height: 1.4; }
+    #magic-detail {
+      flex: 1; overflow-y: auto;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 2px; padding: 14px;
+    }
+    .magic-detail-name { font-size: 16px; margin-bottom: 4px; }
+    .magic-detail-school { font-size: 9px; color: rgba(255,255,255,0.35); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+    .magic-detail-desc { font-size: 11px; color: rgba(255,255,255,0.55); line-height: 1.6; margin-bottom: 12px; }
+    .magic-stat { font-size: 10px; color: rgba(255,255,255,0.50); padding: 2px 0; }
+    .magic-detail-stats { margin-bottom: 12px; }
+    .magic-detail-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+    .magic-btn {
+      padding: 4px 14px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.60);
+      font-family: Georgia, serif; font-size: 10px;
+      letter-spacing: 1px; cursor: pointer; border-radius: 2px;
+    }
+    .magic-btn:hover { border-color: rgba(245,158,11,0.50); color: #f59e0b; }
+    .magic-btn-active { border-color: rgba(100,200,255,0.50); color: rgba(100,200,255,0.80); }
+    .magic-empty { text-align: center; padding: 20px; color: rgba(255,255,255,0.25); font-size: 11px; }
+    #magic-equipped {
+      margin-top: 10px; display: flex; gap: 16px; justify-content: center;
+    }
+    .magic-hand-slot {
+      text-align: center; padding: 6px 14px;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 2px; min-width: 120px;
+    }
+    .magic-hand-label { font-size: 8px; color: rgba(255,255,255,0.30); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; }
+    .magic-hand-name { font-size: 11px; color: rgba(100,200,255,0.70); }
+
+    /* ── Crafting Panel ────────────────────────────────────────── */
+    #craft-container {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    }
+    #craft-subtabs {
+      display: flex; gap: 8px; justify-content: center; margin-bottom: 10px;
+    }
+    .craft-subtab {
+      padding: 5px 20px; cursor: pointer;
+      font-family: Georgia, serif; font-size: 10px;
+      letter-spacing: 2px; text-transform: uppercase;
+      color: rgba(255,255,255,0.35);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 2px;
+    }
+    .craft-subtab:hover { border-color: rgba(255,255,255,0.25); color: rgba(255,255,255,0.55); }
+    .craft-subtab-active { border-color: rgba(245,158,11,0.50); color: rgba(245,158,11,0.80); background: rgba(245,158,11,0.06); }
+    #craft-body { display: flex; gap: 12px; flex: 1; overflow: hidden; }
+    #craft-recipe-list {
+      width: 220px; overflow-y: auto;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 2px; padding: 4px;
+    }
+    .craft-recipe-item {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 8px; cursor: pointer; border-radius: 2px;
+      border: 1px solid transparent;
+    }
+    .craft-recipe-item:hover { background: rgba(255,255,255,0.05); }
+    .craft-recipe-item-selected { background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.30); }
+    .craft-recipe-item-unavailable { opacity: 0.4; }
+    .craft-recipe-name { font-size: 11px; flex: 1; }
+    .craft-recipe-count { font-size: 9px; color: rgba(245,158,11,0.55); }
+    #craft-detail {
+      flex: 1; overflow-y: auto;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 2px; padding: 14px;
+    }
+    .craft-detail-name { font-size: 16px; margin-bottom: 4px; }
+    .craft-detail-output { font-size: 10px; color: rgba(245,158,11,0.65); margin-bottom: 8px; }
+    .craft-detail-desc { font-size: 11px; color: rgba(255,255,255,0.55); line-height: 1.6; margin-bottom: 12px; }
+    .craft-section { font-size: 9px; color: rgba(255,255,255,0.30); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; margin-top: 8px; }
+    .craft-ingredient {
+      font-size: 10px; padding: 3px 0;
+    }
+    .craft-ing-have { color: rgba(100,255,100,0.65); }
+    .craft-ing-need { color: rgba(255,100,100,0.65); }
+    .craft-output-stats { font-size: 10px; color: rgba(255,255,255,0.50); padding: 2px 0; }
+    .craft-btn {
+      margin-top: 14px;
+      padding: 6px 24px;
+      background: rgba(245,158,11,0.10);
+      border: 1px solid rgba(245,158,11,0.40);
+      color: rgba(245,158,11,0.85);
+      font-family: Georgia, serif; font-size: 11px;
+      letter-spacing: 2px; cursor: pointer; border-radius: 2px;
+    }
+    .craft-btn:hover { background: rgba(245,158,11,0.20); border-color: rgba(245,158,11,0.60); }
+    .craft-btn:disabled { opacity: 0.3; cursor: default; }
+    .craft-btn:disabled:hover { background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.40); }
+    .craft-empty { text-align: center; padding: 20px; color: rgba(255,255,255,0.25); font-size: 11px; }
+    .craft-success {
+      color: rgba(100,255,100,0.8); font-size: 10px; margin-top: 8px;
+      animation: craft-flash 1.5s forwards;
+    }
+    @keyframes craft-flash {
+      0% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    /* ── Quest HUD (objective under compass) ─────────────────── */
+    #quest-hud {
+      position: absolute;
+      top: 72px; left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      pointer-events: none;
+      z-index: 1;
+    }
+    #quest-hud-title {
+      font-size: 9px;
+      color: rgba(245,158,11,0.55);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    #quest-hud-obj {
+      font-size: 11px;
+      color: rgba(255,255,255,0.55);
+      letter-spacing: 1px;
+      margin-top: 2px;
+    }
+    #quest-hud-dist {
+      font-size: 9px;
+      color: rgba(255,255,255,0.30);
+      margin-top: 1px;
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="canvas"></canvas>
+
+  <!-- HUD (hidden until game starts) -->
+  <div id="hud" style="display:none">
+    <div id="vignette"></div>
+
+    <!-- Compass -->
+    <div id="compass">
+      <div id="compass-strip"></div>
+      <div id="compass-center"></div>
+    </div>
+    <div id="quest-hud">
+      <div id="quest-hud-title"></div>
+      <div id="quest-hud-obj"></div>
+      <div id="quest-hud-dist"></div>
+    </div>
+    <div id="location-name">Greenvale</div>
+    <div id="time-display">8:00</div>
+    <div id="weather-display"></div>
+
+    <!-- Crosshair -->
+    <div id="crosshair"><div id="crosshair-dot"></div></div>
+    <div id="ammo-display"><span class="ammo-count" id="ammo-count">0</span> <span class="ammo-label" id="ammo-label">arrows</span></div>
+    <div id="draw-indicator"><div id="draw-fill"></div></div>
+
+    <!-- Interact prompt -->
+    <div id="interact-prompt">E — Enter Town</div>
+
+    <!-- XP Bar -->
+    <div id="xp-bar-wrap">
+      <div id="level-badge">Lv 1</div>
+      <div id="xp-track"><div id="xp-fill"></div></div>
+      <div id="xp-text">0 / 100</div>
+    </div>
+
+    <!-- Resource Bars -->
+    <div id="bars">
+      <div class="bar-group">
+        <div class="bar-label">Health</div>
+        <div class="bar-track"><div class="bar-fill" id="hp-fill" style="width:100%"></div></div>
+      </div>
+      <div class="bar-group">
+        <div class="bar-label">Stamina</div>
+        <div class="bar-track"><div class="bar-fill" id="sp-fill" style="width:100%"></div></div>
+      </div>
+      <div class="bar-group">
+        <div class="bar-label">Magic</div>
+        <div class="bar-track"><div class="bar-fill" id="mp-fill" style="width:100%"></div></div>
+      </div>
+    </div>
+
+    <!-- Hotbar -->
+    <div id="hotbar">
+      <div class="hb-slot" id="hotbar-0"><span class="hb-key">1</span></div>
+      <div class="hb-slot" id="hotbar-1"><span class="hb-key">2</span></div>
+      <div class="hb-slot" id="hotbar-2"><span class="hb-key">3</span></div>
+      <div class="hb-slot" id="hotbar-3"><span class="hb-key">4</span></div>
+    </div>
+
+    <!-- Sprint -->
+    <div id="sprint-indicator">Sprinting</div>
+  </div>
+
+  <!-- Level-Up Panel -->
+  <div id="levelup-overlay">
+    <div id="levelup-container">
+      <div id="levelup-title">Level Up!</div>
+      <div id="levelup-subtitle">You reached level <span id="levelup-level">2</span></div>
+      <div id="levelup-points">Stat Points: <span id="levelup-pts">5</span></div>
+      <div id="levelup-stats">
+        <div class="levelup-row"><span class="levelup-stat-name">Strength</span><span class="levelup-stat-val" id="lu-str">5</span><button class="levelup-plus" data-stat="str">+</button><span class="levelup-stat-desc">Melee damage, carry weight</span></div>
+        <div class="levelup-row"><span class="levelup-stat-name">Agility</span><span class="levelup-stat-val" id="lu-agi">5</span><button class="levelup-plus" data-stat="agi">+</button><span class="levelup-stat-desc">Move speed, dodge</span></div>
+        <div class="levelup-row"><span class="levelup-stat-name">Endurance</span><span class="levelup-stat-val" id="lu-end">5</span><button class="levelup-plus" data-stat="end">+</button><span class="levelup-stat-desc">Max stamina, stamina regen</span></div>
+        <div class="levelup-row"><span class="levelup-stat-name">Intelligence</span><span class="levelup-stat-val" id="lu-int">5</span><button class="levelup-plus" data-stat="int">+</button><span class="levelup-stat-desc">Max magic, spell damage</span></div>
+        <div class="levelup-row"><span class="levelup-stat-name">Willpower</span><span class="levelup-stat-val" id="lu-wil">5</span><button class="levelup-plus" data-stat="wil">+</button><span class="levelup-stat-desc">Magic regen, magic resist</span></div>
+        <div class="levelup-row"><span class="levelup-stat-name">Perception</span><span class="levelup-stat-val" id="lu-per">5</span><button class="levelup-plus" data-stat="per">+</button><span class="levelup-stat-desc">Crit chance, ranged accuracy</span></div>
+      </div>
+      <button id="levelup-done">Continue</button>
+    </div>
+  </div>
+
+  <!-- Unified Menu (Inventory / Quests / Spellbook) -->
+  <div id="menu-overlay">
+    <div id="menu-container">
+      <div id="menu-tab-bar">
+        <div class="menu-tab menu-tab-active" data-panel="inventory">Inventory</div>
+        <div class="menu-tab" data-panel="character">Character</div>
+        <div class="menu-tab" data-panel="quests">Quests</div>
+        <div class="menu-tab" data-panel="magic">Spellbook</div>
+        <div class="menu-tab" data-panel="crafting">Crafting</div>
+      </div>
+
+      <!-- Inventory Panel -->
+      <div class="menu-panel menu-panel-active" id="panel-inventory">
+        <div id="inv-container">
+          <div id="inv-header">
+            <div id="inv-meta">
+              Gold: <span id="inv-gold">0</span> &nbsp;&bull;&nbsp;
+              Weight: <span id="inv-weight">0 / 100</span>
+            </div>
+          </div>
+          <div id="inv-tabs">
+            <div class="inv-tab inv-tab-active" data-tab="all">All</div>
+            <div class="inv-tab" data-tab="weapons">Weapons</div>
+            <div class="inv-tab" data-tab="armor">Armor</div>
+            <div class="inv-tab" data-tab="potions">Potions</div>
+            <div class="inv-tab" data-tab="materials">Materials</div>
+          </div>
+          <div id="inv-body">
+            <div id="inv-equip-list"></div>
+            <div id="inv-item-list"></div>
+            <div id="inv-detail"><div class="inv-detail-empty">Select an item</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Character Panel -->
+      <div class="menu-panel" id="panel-character">
+        <div id="char-container">
+          <div id="char-info"></div>
+          <div id="char-stats"></div>
+        </div>
+      </div>
+
+      <!-- Quests Panel -->
+      <div class="menu-panel" id="panel-quests">
+        <div id="quest-container">
+          <div id="quest-body">
+            <div id="quest-list"></div>
+            <div id="quest-detail"><div class="quest-empty">Select a quest</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spellbook Panel -->
+      <div class="menu-panel" id="panel-magic">
+        <div id="magic-container">
+          <div id="magic-equipped">
+            <div class="magic-hand-slot">
+              <div class="magic-hand-label">Left Hand (RMB)</div>
+              <div class="magic-hand-name" id="magic-left-name">— None —</div>
+            </div>
+            <div class="magic-hand-slot">
+              <div class="magic-hand-label">Right Hand (Q)</div>
+              <div class="magic-hand-name" id="magic-right-name">— None —</div>
+            </div>
+          </div>
+          <div id="magic-body">
+            <div id="magic-spell-list"></div>
+            <div id="magic-detail"><div class="magic-empty">Select a spell</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Crafting Panel -->
+      <div class="menu-panel" id="panel-crafting">
+        <div id="craft-container">
+          <div id="craft-subtabs">
+            <div class="craft-subtab craft-subtab-active" data-craft="alchemy">Alchemy</div>
+            <div class="craft-subtab" data-craft="smithing">Smithing</div>
+            <div class="craft-subtab" data-craft="fletching">Fletching</div>
+          </div>
+          <div id="craft-body">
+            <div id="craft-recipe-list"></div>
+            <div id="craft-detail"><div class="craft-empty">Select a recipe</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loot Popup -->
+  <div id="loot-popup">
+    <h3>Loot</h3>
+    <div id="loot-items"></div>
+    <button class="loot-close" id="loot-close-btn">Take All</button>
+  </div>
+
+  <!-- Dialogue Panel -->
+  <div id="dialogue-overlay">
+    <div id="dialogue-panel">
+      <div id="dialogue-speaker">NPC Name</div>
+      <div id="dialogue-text">Dialogue text goes here.</div>
+      <div id="dialogue-options"></div>
+    </div>
+  </div>
+
+  <!-- Shop Panel -->
+  <div id="shop-overlay">
+    <div id="shop-container">
+      <div id="shop-header">
+        <h2 id="shop-title">Shop</h2>
+        <div id="shop-gold">Gold: 0</div>
+      </div>
+      <div id="shop-tabs">
+        <div class="shop-tab shop-tab-active" data-tab="buy">Buy</div>
+        <div class="shop-tab" data-tab="sell">Sell</div>
+      </div>
+      <div id="shop-items"></div>
+      <button id="shop-close-btn">Close</button>
+    </div>
+  </div>
+
+  <!-- Start Screen -->
+  <div id="overlay">
+    <h1>AETHERMOOR</h1>
+    <div class="subtitle">Realms of Aethermoor &mdash; Phase I</div>
+    <button id="start-btn">New Game</button>
+    <button id="continue-btn">Continue</button>
+    <div id="continue-info"></div>
+    <div class="controls-hint">
+      <span>W A S D</span> — Move &nbsp;&nbsp; <span>Mouse</span> — Look &nbsp;&nbsp; <span>LMB</span> — Attack &nbsp;&nbsp; <span>E</span> — Interact<br>
+      <span>Shift</span> — Sprint &nbsp;&nbsp; <span>I / Tab</span> — Menu &nbsp;&nbsp; <span>C</span> — Character &nbsp;&nbsp; <span>J</span> — Quests &nbsp;&nbsp; <span>K</span> — Spellbook &nbsp;&nbsp; <span>F</span> — Crafting<br>
+      <span>RMB</span> — Cast Left &nbsp;&nbsp; <span>Q</span> — Cast Right &nbsp;&nbsp; <span>1-4</span> — Hotbar &nbsp;&nbsp; <span>Esc</span> — Close / Pause
+    </div>
+  </div>
+
+  <!-- Pause Screen -->
+  <div id="pause-overlay">
+    <h2>Paused</h2>
+    <p>Click to resume</p>
+    <div class="pause-buttons">
+      <button class="pause-btn" id="save-btn">Save Game</button>
+      <button class="pause-btn" id="load-btn">Load Game</button>
+    </div>
+    <div id="save-status"></div>
+  </div>
+
+  <!-- Combat FX -->
+  <div id="damage-flash"></div>
+  <div id="hit-marker">✦</div>
+  <div id="kill-feed"></div>
+
+  <!-- Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+  <!-- Game scripts — order matters -->
+  <script src="js/player.js"></script>
+  <script src="js/items.js"></script>
+  <script src="js/inventory.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/enemies.js"></script>
+  <script src="js/npcs.js"></script>
+  <script src="js/quests.js"></script>
+  <script src="js/magic.js"></script>
+  <script src="js/crafting.js"></script>
+  <script src="js/save.js"></script>
+  <script src="js/game.js"></script>
+
+</body>
+</html>
