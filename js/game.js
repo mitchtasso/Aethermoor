@@ -104,7 +104,7 @@ scene.add(hemiLight);
 // gameTime is in hours (0–24).
 
 let gameTime = 8.0; // start at 8:00 AM
-const TIME_SCALE = 1.0 / 60.0; // hours per real second
+const TIME_SCALE = (1.0/60.0) / 60.0; // hours per real second
 
 // Time-of-day color presets (interpolated)
 const TOD = {
