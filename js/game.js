@@ -952,11 +952,13 @@ function updateArrowProjectiles(dt) {
       if (dist < 1.3) {
         enemy.takeDamage(a.damage);
         triggerHitMarker();
+        sound.playHit();
         if (enemy.dead) {
           enemy._magicLootDone = true;
           addKillMessage(enemy.name);
           quests.onKill(enemy.type);
           awardXP(enemy.xp);
+          sound.playEnemyDeath();
           const loot = rollLoot(enemy.lootTable);
           loot.push('gold');
           spawnLootDrop(enemy.mesh.position.x, enemy.mesh.position.z, loot);
@@ -1024,19 +1026,31 @@ function onPlayerHit(dmg) {
   const reduced = Math.max(1, dmg - player.armor);
   player.hp = Math.max(0, player.hp - reduced);
   triggerDamageFlash();
+  sound.playPlayerHurt();
 }
 
 const enemies = [];
 
 // ── Greenvale (starter area) — wolves + bears ─────────────────────────────
 enemies.push(
-  new Enemy('wolf',  28,  18, scene, onPlayerHit),
-  new Enemy('wolf', -22,  30, scene, onPlayerHit),
+  new Enemy('wolf',  28,  18, scene, onPlayerHit, {
+    patrol: [[28,18],[42,10],[35,30],[20,25]],
+  }),
+  new Enemy('wolf', -22,  30, scene, onPlayerHit, {
+    patrol: [[-22,30],[-10,40],[-30,45],[-35,30]],
+  }),
   new Enemy('wolf',  12, -28, scene, onPlayerHit),
   new Enemy('wolf', -30, -15, scene, onPlayerHit),
-  new Enemy('bear',  -45,  10, scene, onPlayerHit),
-  new Enemy('bear',   40, -35, scene, onPlayerHit),
+  new Enemy('bear',  -45,  10, scene, onPlayerHit, { leash: 25 }),
+  new Enemy('bear',   40, -35, scene, onPlayerHit, { leash: 25 }),
 );
+
+// ── Greenvale Boss: Fenris the Alpha ────────────────────────────────────────
+const fenris = new Enemy('boss_alpha_wolf', -50, -50, scene, onPlayerHit, {
+  boss: true, leash: 50,
+  patrol: [[-50,-50],[-35,-60],[-20,-50],[-35,-40]],
+});
+enemies.push(fenris);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INVENTORY
@@ -1046,6 +1060,7 @@ const inventory = new Inventory(player);
 const quests    = new QuestManager();
 const magic     = new MagicManager(player, scene, camera);
 const crafting  = new CraftingManager(inventory);
+const sound     = new SoundManager();
 
 // Loot popup elements
 const lootPopup    = document.getElementById('loot-popup');
@@ -1079,6 +1094,7 @@ lootCloseBtn.addEventListener('click', () => {
   _pendingLoot = [];
   lootPopup.style.display = 'none';
   inventory._updateHotbarUI();
+  sound.playLootPickup();
   // Re-lock cursor to resume gameplay
   canvas.requestPointerLock();
 });
@@ -1138,17 +1154,31 @@ lootCloseBtn.addEventListener('click', () => {
 
   // ── Thornwood enemies — wolves, spiders, bandits ──────────────────────────
   enemies.push(
-    new Enemy('wolf',    60,  -20, scene, onPlayerHit),
+    new Enemy('wolf',    60,  -20, scene, onPlayerHit, {
+      patrol: [[60,-20],[75,-15],[80,-30],[65,-35]],
+    }),
     new Enemy('wolf',    110, -10, scene, onPlayerHit),
     new Enemy('spider',  75,  -55, scene, onPlayerHit),
     new Enemy('spider',  95,  -30, scene, onPlayerHit),
     new Enemy('spider',  120, -60, scene, onPlayerHit),
-    new Enemy('bandit',  85,  -40, scene, onPlayerHit),
-    new Enemy('bandit',  140, -55, scene, onPlayerHit),
+    new Enemy('bandit',  85,  -40, scene, onPlayerHit, {
+      patrol: [[85,-40],[100,-45],[110,-35],[95,-30]],
+    }),
+    new Enemy('bandit',  140, -55, scene, onPlayerHit, {
+      patrol: [[140,-55],[155,-50],[160,-65],[145,-65]],
+    }),
     new Enemy('bandit',  155, -35, scene, onPlayerHit),
-    new Enemy('skeleton', 130, -70, scene, onPlayerHit),
+    new Enemy('skeleton', 130, -70, scene, onPlayerHit, {
+      patrol: [[130,-70],[140,-75],[150,-70],[140,-62]],
+    }),
     new Enemy('skeleton', 160, -65, scene, onPlayerHit),
   );
+
+  // ── Thornwood Boss: Arachne the Broodmother ────────────────────────────────
+  const arachne = new Enemy('boss_spider_queen', 100, -75, scene, onPlayerHit, {
+    boss: true, leash: 45,
+  });
+  enemies.push(arachne);
 }());
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1257,18 +1287,27 @@ lootCloseBtn.addEventListener('click', () => {
 
   // ── Ashfeld enemies ────────────────────────────────────────────────────────
   enemies.push(
-    new Enemy('fire_imp',    CX - 40, CZ + 30,  scene, onPlayerHit),
+    new Enemy('fire_imp',    CX - 40, CZ + 30,  scene, onPlayerHit, {
+      patrol: [[CX-40,CZ+30],[CX-30,CZ+40],[CX-45,CZ+45]],
+    }),
     new Enemy('fire_imp',    CX + 35, CZ + 40,  scene, onPlayerHit),
     new Enemy('fire_imp',    CX - 50, CZ - 30,  scene, onPlayerHit),
-    new Enemy('fire_imp',    CX + 55, CZ + 15,  scene, onPlayerHit),
+    new Enemy('fire_imp',    CX + 55, CZ + 15,  scene, onPlayerHit, {
+      patrol: [[CX+55,CZ+15],[CX+65,CZ+25],[CX+50,CZ+30]],
+    }),
     new Enemy('fire_imp',    CX - 25, CZ + 55,  scene, onPlayerHit),
     new Enemy('fire_imp',    CX + 20, CZ - 50,  scene, onPlayerHit),
     new Enemy('fire_imp',    CX - 60, CZ + 10,  scene, onPlayerHit),
-    new Enemy('magma_golem', CX + 50, CZ + 55,  scene, onPlayerHit),
-    new Enemy('magma_golem', CX - 55, CZ - 45,  scene, onPlayerHit),
-    new Enemy('magma_golem', CX + 30, CZ - 60,  scene, onPlayerHit),
-    new Enemy('magma_golem', CX - 40, CZ + 60,  scene, onPlayerHit),
+    new Enemy('magma_golem', CX + 50, CZ + 55,  scene, onPlayerHit, { leash: 30 }),
+    new Enemy('magma_golem', CX - 55, CZ - 45,  scene, onPlayerHit, { leash: 30 }),
+    new Enemy('magma_golem', CX + 30, CZ - 60,  scene, onPlayerHit, { leash: 30 }),
+    new Enemy('magma_golem', CX - 40, CZ + 60,  scene, onPlayerHit, { leash: 30 }),
   );
+
+  // ── Ashfeld Boss: Pyraxis the Molten ───────────────────────────────────────
+  enemies.push(new Enemy('boss_magma_titan', CX + 65, CZ - 70, scene, onPlayerHit, {
+    boss: true, leash: 55,
+  }));
 }());
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1355,20 +1394,32 @@ lootCloseBtn.addEventListener('click', () => {
 
   // ── Frostveil enemies ──────────────────────────────────────────────────────
   enemies.push(
-    new Enemy('frost_wolf', WX + 45, WZ + 30,  scene, onPlayerHit),
-    new Enemy('frost_wolf', WX - 40, WZ + 40,  scene, onPlayerHit),
+    new Enemy('frost_wolf', WX + 45, WZ + 30,  scene, onPlayerHit, {
+      patrol: [[WX+45,WZ+30],[WX+55,WZ+40],[WX+40,WZ+50],[WX+35,WZ+35]],
+    }),
+    new Enemy('frost_wolf', WX - 40, WZ + 40,  scene, onPlayerHit, {
+      patrol: [[WX-40,WZ+40],[WX-30,WZ+50],[WX-50,WZ+55]],
+    }),
     new Enemy('frost_wolf', WX + 55, WZ - 25,  scene, onPlayerHit),
     new Enemy('frost_wolf', WX - 50, WZ - 35,  scene, onPlayerHit),
     new Enemy('frost_wolf', WX + 30, WZ + 55,  scene, onPlayerHit),
-    new Enemy('frost_wolf', WX - 60, WZ + 10,  scene, onPlayerHit),
+    new Enemy('frost_wolf', WX - 60, WZ + 10,  scene, onPlayerHit, {
+      patrol: [[WX-60,WZ+10],[WX-70,WZ+20],[WX-55,WZ+25]],
+    }),
     new Enemy('frost_wolf', WX + 20, WZ - 55,  scene, onPlayerHit),
-    new Enemy('ice_wraith', WX - 50, WZ - 50,  scene, onPlayerHit),
-    new Enemy('ice_wraith', WX + 55, WZ + 50,  scene, onPlayerHit),
+    new Enemy('ice_wraith', WX - 50, WZ - 50,  scene, onPlayerHit, { leash: 35 }),
+    new Enemy('ice_wraith', WX + 55, WZ + 50,  scene, onPlayerHit, { leash: 35 }),
     new Enemy('ice_wraith', WX - 35, WZ + 60,  scene, onPlayerHit),
     new Enemy('ice_wraith', WX + 60, WZ - 40,  scene, onPlayerHit),
     new Enemy('ice_wraith', WX - 20, WZ - 65,  scene, onPlayerHit),
     new Enemy('ice_wraith', WX + 40, WZ - 60,  scene, onPlayerHit),
   );
+
+  // ── Frostveil Boss: Glacius the Eternal ────────────────────────────────────
+  enemies.push(new Enemy('boss_frost_warden', WX - 65, WZ - 70, scene, onPlayerHit, {
+    boss: true, leash: 50,
+    patrol: [[WX-65,WZ-70],[WX-50,WZ-75],[WX-40,WZ-65],[WX-55,WZ-60]],
+  }));
 }());
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1477,18 +1528,44 @@ lootCloseBtn.addEventListener('click', () => {
 
   // ── Blight enemies ─────────────────────────────────────────────────────────
   enemies.push(
-    new Enemy('blight_hound',     DX - 45, DZ + 30,  scene, onPlayerHit),
-    new Enemy('blight_hound',     DX + 40, DZ + 40,  scene, onPlayerHit),
+    new Enemy('blight_hound',     DX - 45, DZ + 30,  scene, onPlayerHit, {
+      patrol: [[DX-45,DZ+30],[DX-35,DZ+40],[DX-50,DZ+45]],
+    }),
+    new Enemy('blight_hound',     DX + 40, DZ + 40,  scene, onPlayerHit, {
+      patrol: [[DX+40,DZ+40],[DX+55,DZ+35],[DX+50,DZ+50]],
+    }),
     new Enemy('blight_hound',     DX - 55, DZ - 25,  scene, onPlayerHit),
     new Enemy('blight_hound',     DX + 50, DZ - 35,  scene, onPlayerHit),
     new Enemy('blight_hound',     DX - 35, DZ + 55,  scene, onPlayerHit),
     new Enemy('blight_hound',     DX + 60, DZ + 10,  scene, onPlayerHit),
-    new Enemy('corrupted_knight', DX + 55, DZ + 50,  scene, onPlayerHit),
-    new Enemy('corrupted_knight', DX - 50, DZ - 50,  scene, onPlayerHit),
-    new Enemy('corrupted_knight', DX + 40, DZ - 55,  scene, onPlayerHit),
-    new Enemy('corrupted_knight', DX - 60, DZ + 40,  scene, onPlayerHit),
-    new Enemy('corrupted_knight', DX + 25, DZ + 65,  scene, onPlayerHit),
+    new Enemy('corrupted_knight', DX + 55, DZ + 50,  scene, onPlayerHit, {
+      patrol: [[DX+55,DZ+50],[DX+65,DZ+55],[DX+60,DZ+65],[DX+50,DZ+60]],
+      leash: 35,
+    }),
+    new Enemy('corrupted_knight', DX - 50, DZ - 50,  scene, onPlayerHit, {
+      patrol: [[DX-50,DZ-50],[DX-40,DZ-55],[DX-55,DZ-60]],
+      leash: 35,
+    }),
+    new Enemy('corrupted_knight', DX + 40, DZ - 55,  scene, onPlayerHit, { leash: 35 }),
+    new Enemy('corrupted_knight', DX - 60, DZ + 40,  scene, onPlayerHit, { leash: 35 }),
+    new Enemy('corrupted_knight', DX + 25, DZ + 65,  scene, onPlayerHit, { leash: 35 }),
   );
+
+  // ── Blight Boss: Malachar the Undying ──────────────────────────────────────
+  const malachar = new Enemy('boss_blight_lord', DX + 70, DZ - 75, scene, onPlayerHit, {
+    boss: true, leash: 60,
+    patrol: [[DX+70,DZ-75],[DX+80,DZ-65],[DX+75,DZ-55],[DX+65,DZ-65]],
+  });
+  // Summon callback — spawns 2 blight hounds nearby
+  malachar._onSummon = function(boss) {
+    for (let i = 0; i < 2; i++) {
+      const sx = boss.mesh.position.x + (Math.random() - 0.5) * 8;
+      const sz = boss.mesh.position.z + (Math.random() - 0.5) * 8;
+      const minion = new Enemy('blight_hound', sx, sz, scene, onPlayerHit, { leash: 20 });
+      enemies.push(minion);
+    }
+  };
+  enemies.push(malachar);
 }());
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1623,6 +1700,7 @@ function openDialogue(npc) {
     if (quests.allObjectivesMet(qid)) {
       const rewards = quests.turnIn(qid);
       if (rewards) {
+        sound.playQuestComplete();
         if (rewards.gold) inventory.gold += rewards.gold;
         if (rewards.xp)   awardXP(rewards.xp);
         if (rewards.items) {
@@ -1867,6 +1945,7 @@ function openMenu(tab) {
   _menuOpen = true;
   menuOverlay.style.display = 'flex';
   switchMenuTab(_menuTab);
+  sound.playMenuOpen();
   if (document.pointerLockElement) document.exitPointerLock();
 }
 
@@ -1875,6 +1954,7 @@ function closeMenu() {
   menuOverlay.style.display = 'none';
   inventory.close();
   quests.close();
+  sound.playMenuClose();
   canvas.requestPointerLock();
 }
 
@@ -2142,6 +2222,7 @@ craftDetail.addEventListener('click', e => {
   const recipe = recipes[idx];
   if (recipe && crafting.craft(recipe)) {
     renderCraftingMenu();
+    sound.playCraftSuccess();
     // Flash success message
     const msg = document.createElement('div');
     msg.className = 'craft-success';
@@ -2228,6 +2309,7 @@ function awardXP(amount) {
   setTimeout(() => { if (line.parentNode) line.parentNode.removeChild(line); }, 2800);
 
   if (leveled) {
+    sound.playLevelUp();
     // Small delay so kill message shows first
     setTimeout(() => openLevelUp(), 300);
   }
@@ -2338,7 +2420,22 @@ startBtn.addEventListener('click', requestLock);
 // Clicking the pause screen re-locks (but not if clicking save/load buttons)
 pauseOverlay.addEventListener('click', e => {
   if (e.target.closest('.pause-btn')) return;
+  if (e.target.closest('#volume-controls')) return; // don't re-lock when adjusting volume
   requestLock();
+});
+
+// ── Volume control sliders ─────────────────────────────────────────────────
+document.getElementById('vol-master').addEventListener('input', e => {
+  sound.setMasterVolume(parseInt(e.target.value) / 100);
+});
+document.getElementById('vol-sfx').addEventListener('input', e => {
+  sound.setSfxVolume(parseInt(e.target.value) / 100);
+});
+document.getElementById('vol-ambient').addEventListener('input', e => {
+  sound.setAmbientVolume(parseInt(e.target.value) / 100);
+});
+document.getElementById('vol-music').addEventListener('input', e => {
+  sound.setMusicVolume(parseInt(e.target.value) / 100);
 });
 
 document.addEventListener('pointerlockchange', () => {
@@ -2415,6 +2512,7 @@ document.addEventListener('keydown', e => {
   // Cast right-hand spell — Q key
   if (e.code === 'KeyQ' && document.pointerLockElement && !_menuOpen) {
     magic.tryCast('right');
+    sound.playSpellCast();
   }
   // Hotbar keys 1-4
   if (e.code >= 'Digit1' && e.code <= 'Digit4' && document.pointerLockElement && !_menuOpen) {
@@ -2433,6 +2531,7 @@ canvas.addEventListener('mousedown', e => {
     _rmbHeld = true;
     // Try single cast for non-beam spells
     magic.tryCast('left');
+    sound.playSpellCast();
   }
 });
 
@@ -2448,6 +2547,7 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 // Hide start overlay once the player has clicked in
 startBtn.addEventListener('click', () => {
   overlay.style.display = 'none';
+  sound.init(); // initialize Web Audio on user gesture
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2498,6 +2598,7 @@ loadBtn.addEventListener('click', e => { e.stopPropagation(); doLoad(); });
 }());
 
 continueBtn.addEventListener('click', () => {
+  sound.init(); // initialize Web Audio on user gesture
   const data = SaveManager.load();
   if (data) {
     SaveManager.apply(data, player, inventory, quests, magic);
@@ -2588,9 +2689,57 @@ function updateAmmoHUD() {
 // ═══════════════════════════════════════════════════════════════════════════
 // GAME LOOP
 // ═══════════════════════════════════════════════════════════════════════════
+// BOSS HEALTH BAR
+// ═══════════════════════════════════════════════════════════════════════════
+
+const bossBarEl   = document.getElementById('boss-bar');
+const bossBarName = document.getElementById('boss-bar-name');
+const bossBarFill = document.getElementById('boss-bar-fill');
+let _activeBoss = null;
+
+function updateBossBar() {
+  // Find closest alive boss in aggro range
+  let closestBoss = null;
+  let closestDist = Infinity;
+  const pp = player.position;
+
+  for (const enemy of enemies) {
+    if (!enemy.isBoss || enemy.dead) continue;
+    const dx = enemy.mesh.position.x - pp.x;
+    const dz = enemy.mesh.position.z - pp.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < enemy.aggroRange * 1.5 && dist < closestDist) {
+      closestBoss = enemy;
+      closestDist = dist;
+    }
+  }
+
+  if (closestBoss) {
+    _activeBoss = closestBoss;
+    bossBarEl.style.display = 'block';
+    bossBarName.textContent = closestBoss.name;
+    bossBarFill.style.width = (closestBoss.hp / closestBoss.maxHp * 100) + '%';
+  } else {
+    if (_activeBoss && _activeBoss.dead) {
+      // Brief delay showing empty bar after boss dies
+      bossBarFill.style.width = '0%';
+      setTimeout(() => {
+        bossBarEl.style.display = 'none';
+        _activeBoss = null;
+      }, 1500);
+    } else {
+      bossBarEl.style.display = 'none';
+      _activeBoss = null;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 
 let prevTime = performance.now();
 let elapsed  = 0;
+let _wasAttacking = false;
+let _wasDrawing   = false;
 
 function animate() {
   requestAnimationFrame(animate);
@@ -2605,6 +2754,30 @@ function animate() {
   if (locked) {
     player.update(dt);
     ui.update();
+
+    // ── Sound: attack start detection ──────────────────────────────────────
+    if (player.isAttacking && !_wasAttacking && !player.isRanged) {
+      sound.playSwordSwing();
+    }
+    _wasAttacking = player.isAttacking;
+
+    // ── Sound: bow draw/release ────────────────────────────────────────────
+    if (player.isDrawing && !_wasDrawing) {
+      sound.playBowDraw();
+    }
+    if (_wasDrawing && !player.isDrawing && player._wantsShoot) {
+      sound.playBowRelease();
+    }
+    _wasDrawing = player.isDrawing;
+
+    // ── Sound: footsteps ───────────────────────────────────────────────────
+    sound.updateFootsteps(dt, player.isMoving, player.isSprinting);
+
+    // ── Sound: ambient + music (biome-based) ───────────────────────────────
+    const currentBiome = typeof getBiome === 'function'
+      ? getBiome(player.position.x, player.position.z) : 'greenvale';
+    sound.updateAmbient(currentBiome);
+    sound.updateMusic(currentBiome);
 
     // ── Enemy updates + hit detection ──────────────────────────────────────
     const pp = player.position;
@@ -2625,9 +2798,11 @@ function animate() {
               enemy.takeDamage(player.attackDamage);
               player._hitDealt = true;
               triggerHitMarker();
+              sound.playHit();
               if (enemy.dead) {
                 enemy._magicLootDone = true;
                 addKillMessage(enemy.name);
+                sound.playEnemyDeath();
                 quests.onKill(enemy.type);
                 awardXP(enemy.xp);
                 const loot = rollLoot(enemy.lootTable);
@@ -2654,6 +2829,7 @@ function animate() {
         addKillMessage(enemy.name);
         quests.onKill(enemy.type);
         awardXP(enemy.xp);
+        sound.playEnemyDeath();
         const loot = rollLoot(enemy.lootTable);
         loot.push('gold');
         spawnLootDrop(enemy.mesh.position.x, enemy.mesh.position.z, loot);
@@ -2685,6 +2861,7 @@ function animate() {
     updateArrowProjectiles(dt);
     updateViewmodel();
     updateAmmoHUD();
+    updateBossBar();
 
     // ── Day/Night + Weather ──────────────────────────────────────────────
     updateDayNight(dt);

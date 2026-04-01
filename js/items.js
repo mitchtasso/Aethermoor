@@ -440,6 +440,54 @@ const LOOT_TABLES = {
     { id: 'sword_steel',       chance: 0.06, countMin: 1, countMax: 1 },
     { id: 'bolt_dark',         chance: 0.20, countMin: 2, countMax: 4 },
   ],
+
+  // ── Boss Loot Tables ─────────────────────────────────────────────────────
+  boss_alpha_wolf: [
+    { id: 'wolf_pelt',         chance: 1.00, countMin: 3, countMax: 5 },
+    { id: 'wolf_fang',         chance: 1.00, countMin: 2, countMax: 4 },
+    { id: 'gold_pouch_large',  chance: 1.00, countMin: 2, countMax: 3 },
+    { id: 'bow_long',          chance: 0.30, countMin: 1, countMax: 1 },
+    { id: 'potion_greater_health', chance: 0.60, countMin: 1, countMax: 2 },
+    { id: 'feather',           chance: 0.80, countMin: 3, countMax: 6 },
+  ],
+  boss_spider_queen: [
+    { id: 'spider_silk',       chance: 1.00, countMin: 5, countMax: 8 },
+    { id: 'spider_venom',      chance: 1.00, countMin: 2, countMax: 3 },
+    { id: 'gold_pouch_large',  chance: 1.00, countMin: 2, countMax: 3 },
+    { id: 'crossbow_light',    chance: 0.25, countMin: 1, countMax: 1 },
+    { id: 'potion_greater_health', chance: 0.50, countMin: 1, countMax: 2 },
+    { id: 'bolt',              chance: 0.80, countMin: 5, countMax: 10 },
+  ],
+  boss_magma_titan: [
+    { id: 'molten_core',       chance: 1.00, countMin: 2, countMax: 3 },
+    { id: 'obsidian_shard',    chance: 1.00, countMin: 4, countMax: 6 },
+    { id: 'fire_essence',      chance: 1.00, countMin: 2, countMax: 3 },
+    { id: 'gold_pouch_large',  chance: 1.00, countMin: 3, countMax: 4 },
+    { id: 'sword_volcanic',    chance: 0.35, countMin: 1, countMax: 1 },
+    { id: 'arrow_fire',        chance: 0.70, countMin: 5, countMax: 10 },
+    { id: 'potion_greater_health', chance: 0.80, countMin: 2, countMax: 2 },
+  ],
+  boss_frost_warden: [
+    { id: 'frost_crystal',     chance: 1.00, countMin: 4, countMax: 6 },
+    { id: 'icebloom',          chance: 1.00, countMin: 3, countMax: 5 },
+    { id: 'yeti_fur',          chance: 0.80, countMin: 1, countMax: 2 },
+    { id: 'gold_pouch_large',  chance: 1.00, countMin: 3, countMax: 4 },
+    { id: 'bow_frost',         chance: 0.25, countMin: 1, countMax: 1 },
+    { id: 'arrow_frost',       chance: 0.70, countMin: 5, countMax: 10 },
+    { id: 'staff_frost',       chance: 0.20, countMin: 1, countMax: 1 },
+    { id: 'potion_greater_health', chance: 0.70, countMin: 2, countMax: 2 },
+  ],
+  boss_blight_lord: [
+    { id: 'dark_iron',         chance: 1.00, countMin: 3, countMax: 5 },
+    { id: 'blight_essence',    chance: 1.00, countMin: 3, countMax: 4 },
+    { id: 'corrupted_bone',    chance: 1.00, countMin: 4, countMax: 6 },
+    { id: 'gold_pouch_large',  chance: 1.00, countMin: 4, countMax: 5 },
+    { id: 'crossbow_heavy',    chance: 0.25, countMin: 1, countMax: 1 },
+    { id: 'sword_dark',        chance: 0.20, countMin: 1, countMax: 1 },
+    { id: 'chest_dark',        chance: 0.15, countMin: 1, countMax: 1 },
+    { id: 'bolt_dark',         chance: 0.70, countMin: 5, countMax: 10 },
+    { id: 'potion_greater_health', chance: 1.00, countMin: 3, countMax: 3 },
+  ],
 };
 
 function rollLoot(tableKey) {

@@ -63,6 +63,38 @@ const ENEMY_TYPES = {
     aggroRange: 20,  atkRange: 2.5,  atkCooldown: 2.0,
     xp: 110, lootTable: 'corrupted_knight', meshBuilder: 'buildCorruptedKnightMesh',
   },
+
+  // ── BOSS ENEMIES ─────────────────────────────────────────────────────────
+  boss_alpha_wolf: {
+    name: 'Fenris the Alpha', hp: 350, damage: 20, speed: 5.5,
+    aggroRange: 30, atkRange: 2.5, atkCooldown: 1.2,
+    xp: 200, lootTable: 'boss_alpha_wolf', meshBuilder: 'buildWolfMesh',
+    specialAttack: 'frenzy', specialCooldown: 8,
+  },
+  boss_spider_queen: {
+    name: 'Arachne the Broodmother', hp: 400, damage: 18, speed: 4.0,
+    aggroRange: 25, atkRange: 2.2, atkCooldown: 1.5,
+    xp: 250, lootTable: 'boss_spider_queen', meshBuilder: 'buildSpiderMesh',
+    specialAttack: 'poison_cloud', specialCooldown: 10,
+  },
+  boss_magma_titan: {
+    name: 'Pyraxis the Molten', hp: 600, damage: 35, speed: 2.5,
+    aggroRange: 25, atkRange: 3.2, atkCooldown: 2.5,
+    xp: 400, lootTable: 'boss_magma_titan', meshBuilder: 'buildMagmaGolemMesh',
+    specialAttack: 'aoe_slam', specialCooldown: 7,
+  },
+  boss_frost_warden: {
+    name: 'Glacius the Eternal', hp: 500, damage: 28, speed: 3.5,
+    aggroRange: 28, atkRange: 2.8, atkCooldown: 1.8,
+    xp: 350, lootTable: 'boss_frost_warden', meshBuilder: 'buildIceWraithMesh',
+    specialAttack: 'charge', specialCooldown: 9,
+  },
+  boss_blight_lord: {
+    name: 'Malachar the Undying', hp: 800, damage: 40, speed: 3.0,
+    aggroRange: 30, atkRange: 3.0, atkCooldown: 2.0,
+    xp: 600, lootTable: 'boss_blight_lord', meshBuilder: 'buildCorruptedKnightMesh',
+    specialAttack: 'summon', specialCooldown: 15,
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -739,7 +771,17 @@ const MESH_BUILDERS = {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class Enemy {
-  constructor(type, x, z, scene, onPlayerHit) {
+  /**
+   * @param {string} type - ENEMY_TYPES key
+   * @param {number} x, z - spawn position
+   * @param {THREE.Scene} scene
+   * @param {function} onPlayerHit - callback(damage)
+   * @param {object} [opts] - optional overrides
+   *   opts.patrol  - array of [x,z] waypoints for patrol route
+   *   opts.leash   - max chase distance from spawn before returning (default 40)
+   *   opts.boss    - true if this is a boss enemy
+   */
+  constructor(type, x, z, scene, onPlayerHit, opts) {
     const cfg = ENEMY_TYPES[type];
     this.type        = type;
     this.name        = cfg.name;
@@ -762,7 +804,30 @@ class Enemy {
     this.onPlayerHit   = onPlayerHit;
     this._magicLootDone = false;
 
+    // ── Patrol system ──────────────────────────────────────────────────────
+    opts = opts || {};
+    this._spawnX   = x;
+    this._spawnZ   = z;
+    this._patrol   = opts.patrol || null;   // [[x,z], [x,z], ...]
+    this._patrolIdx = 0;                    // current waypoint index
+    this._leash    = opts.leash || 40;      // max chase distance from spawn
+    this._returning = false;                // returning to patrol after leash
+
+    // ── Boss system ────────────────────────────────────────────────────────
+    this.isBoss        = opts.boss || false;
+    this._specialTimer = 0;                 // cooldown for special attack
+    this._specialCd    = cfg.specialCooldown || 0;
+    this._specialType  = cfg.specialAttack  || null;
+    this._chargeTarget = null;              // for charge attack
+    this._isCharging   = false;
+    this._chargeSpeed  = 0;
+    this._aoeTimer     = 0;                 // for AoE wind-up
+
     this.mesh = MESH_BUILDERS[cfg.meshBuilder]();
+    // Bosses are 50% larger
+    if (this.isBoss) {
+      this.mesh.scale.setScalar(1.5);
+    }
     this.mesh.position.set(x, terrainHeight(x, z), z);
     scene.add(this.mesh);
     this._scene = scene;
@@ -774,7 +839,7 @@ class Enemy {
     this.hpEl.innerHTML =
       '<div style="background:rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.14);' +
       'border-radius:2px;padding:2px 4px;width:72px;text-align:center">' +
-      `<div style="font-size:9px;color:rgba(255,200,200,0.7);letter-spacing:1px;margin-bottom:2px">${cfg.name}</div>` +
+      `<div style="font-size:9px;color:rgba(255,200,200,0.7);letter-spacing:1px;margin-bottom:2px">${this.isBoss ? '★ ' + cfg.name : cfg.name}</div>` +
       '<div style="background:rgba(60,0,0,0.7);border-radius:1px;height:5px;overflow:hidden">' +
       '<div class="ef" style="background:#dc2626;height:100%;width:100%;transition:width 0.1s"></div>' +
       '</div></div>';
@@ -796,9 +861,76 @@ class Enemy {
     const dz   = playerPos.z - this.mesh.position.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
 
-    this.atkTimer = Math.max(0, this.atkTimer - dt);
+    // Distance from spawn (for leash check)
+    const fromSpawnX = this.mesh.position.x - this._spawnX;
+    const fromSpawnZ = this.mesh.position.z - this._spawnZ;
+    const spawnDist  = Math.sqrt(fromSpawnX * fromSpawnX + fromSpawnZ * fromSpawnZ);
 
+    this.atkTimer = Math.max(0, this.atkTimer - dt);
+    this._specialTimer = Math.max(0, this._specialTimer - dt);
+
+    // ── Charging attack (boss) ──────────────────────────────────────────
+    if (this._isCharging && this._chargeTarget) {
+      const cx = this._chargeTarget.x - this.mesh.position.x;
+      const cz = this._chargeTarget.z - this.mesh.position.z;
+      const cd = Math.sqrt(cx * cx + cz * cz);
+      if (cd < 1.5 || this._chargeSpeed <= 0) {
+        // Charge impact
+        this._isCharging = false;
+        if (dist < 3.5) {
+          this.onPlayerHit(this.damage * 1.5); // 150% damage charge
+        }
+      } else {
+        const s = this._chargeSpeed * dt / cd;
+        this.mesh.position.x += cx * s;
+        this.mesh.position.z += cz * s;
+        this.mesh.position.y = terrainHeight(this.mesh.position.x, this.mesh.position.z);
+        this.mesh.rotation.y = Math.atan2(cx, cz) + Math.PI;
+        this._chargeSpeed -= dt * 2; // decelerate
+        this._animLegs(dt, true);
+      }
+      this._updateHpBar(dist, camera);
+      return;
+    }
+
+    // ── Leash: return to spawn/patrol if too far ────────────────────────
+    if (this._returning) {
+      let targetX, targetZ;
+      if (this._patrol) {
+        const wp = this._patrol[this._patrolIdx];
+        targetX = wp[0]; targetZ = wp[1];
+      } else {
+        targetX = this._spawnX; targetZ = this._spawnZ;
+      }
+      const rx = targetX - this.mesh.position.x;
+      const rz = targetZ - this.mesh.position.z;
+      const rd = Math.sqrt(rx * rx + rz * rz);
+      if (rd < 2) {
+        this._returning = false;
+        this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.2); // heal 20% on return
+        this._hpFill.style.width = (this.hp / this.maxHp * 100) + '%';
+      } else {
+        const s = this.speed * 1.2 * dt / rd;
+        this.mesh.position.x += rx * s;
+        this.mesh.position.z += rz * s;
+        this.mesh.position.y = terrainHeight(this.mesh.position.x, this.mesh.position.z);
+        this.mesh.rotation.y = Math.atan2(rx, rz) + Math.PI;
+        this._animLegs(dt, true);
+      }
+      this._updateHpBar(dist, camera);
+      return;
+    }
+
+    // ── Aggro check ─────────────────────────────────────────────────────
     if (dist < this.aggroRange) {
+      // Leash check — if too far from spawn, start returning
+      if (spawnDist > this._leash) {
+        this._returning = true;
+        this.state = 'returning';
+        this._updateHpBar(dist, camera);
+        return;
+      }
+
       this.mesh.rotation.y = Math.atan2(dx, dz) + Math.PI;
 
       if (dist > this.atkRange) {
@@ -810,30 +942,103 @@ class Enemy {
         this._animLegs(dt, true);
       } else {
         this.state = 'attack';
-        if (this.atkTimer === 0) {
+
+        // Boss special attack check
+        if (this.isBoss && this._specialType && this._specialTimer === 0) {
+          this._doSpecialAttack(playerPos);
+          this._specialTimer = this._specialCd;
+        } else if (this.atkTimer === 0) {
           this.atkTimer = this.atkCooldown;
           this.onPlayerHit(this.damage);
         }
       }
     } else {
-      this.state = 'idle';
-      this._wanderTimer -= dt;
-      if (this._wanderTimer <= 0) {
-        this._wanderAngle += (Math.random() - 0.5) * 1.6;
-        this._wanderTimer  = 1.5 + Math.random() * 2.5;
+      // ── Not aggroed — patrol or wander ────────────────────────────────
+      if (this._patrol && this._patrol.length > 0) {
+        this.state = 'patrol';
+        const wp = this._patrol[this._patrolIdx];
+        const px = wp[0] - this.mesh.position.x;
+        const pz = wp[1] - this.mesh.position.z;
+        const pd = Math.sqrt(px * px + pz * pz);
+
+        if (pd < 1.5) {
+          // Reached waypoint — advance to next
+          this._patrolIdx = (this._patrolIdx + 1) % this._patrol.length;
+        } else {
+          const s = this.speed * 0.4 * dt / pd;
+          this.mesh.position.x += px * s;
+          this.mesh.position.z += pz * s;
+          this.mesh.position.y = terrainHeight(this.mesh.position.x, this.mesh.position.z);
+          this.mesh.rotation.y = Math.atan2(px, pz) + Math.PI;
+          this._animLegs(dt, false);
+        }
+      } else {
+        this.state = 'idle';
+        this._wanderTimer -= dt;
+        if (this._wanderTimer <= 0) {
+          this._wanderAngle += (Math.random() - 0.5) * 1.6;
+          this._wanderTimer  = 1.5 + Math.random() * 2.5;
+        }
+        const s = this.speed * 0.25 * dt;
+        this.mesh.position.x += Math.sin(this._wanderAngle) * s;
+        this.mesh.position.z += Math.cos(this._wanderAngle) * s;
+        this.mesh.position.y  = terrainHeight(this.mesh.position.x, this.mesh.position.z);
+        this.mesh.rotation.y  = this._wanderAngle + Math.PI;
+        this._animLegs(dt, false);
       }
-      const s = this.speed * 0.25 * dt;
-      this.mesh.position.x += Math.sin(this._wanderAngle) * s;
-      this.mesh.position.z += Math.cos(this._wanderAngle) * s;
-      this.mesh.position.y  = terrainHeight(this.mesh.position.x, this.mesh.position.z);
-      this.mesh.rotation.y  = this._wanderAngle + Math.PI;
-      this._animLegs(dt, false);
     }
 
-    // Floating HP bar
+    this._updateHpBar(dist, camera);
+  }
+
+  // ── Boss special attacks ───────────────────────────────────────────────
+  _doSpecialAttack(playerPos) {
+    if (this._specialType === 'charge') {
+      // Charge: rush toward player's current position at high speed
+      this._isCharging = true;
+      this._chargeTarget = { x: playerPos.x, z: playerPos.z };
+      this._chargeSpeed = this.speed * 3.5;
+    } else if (this._specialType === 'aoe_slam') {
+      // AoE slam: hit all nearby (range 5) for 80% damage
+      const dx = playerPos.x - this.mesh.position.x;
+      const dz = playerPos.z - this.mesh.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < 5.0) {
+        this.onPlayerHit(Math.floor(this.damage * 0.8));
+      }
+    } else if (this._specialType === 'frenzy') {
+      // Frenzy: temporary speed + damage boost for 3 seconds
+      const origSpeed = this.speed;
+      const origDmg   = this.damage;
+      this.speed  *= 1.6;
+      this.damage  = Math.floor(this.damage * 1.3);
+      setTimeout(() => {
+        this.speed  = origSpeed;
+        this.damage = origDmg;
+      }, 3000);
+    } else if (this._specialType === 'poison_cloud') {
+      // Poison cloud: deals damage over time if nearby (3 ticks)
+      let ticks = 0;
+      const poisonInterval = setInterval(() => {
+        if (this.dead || ticks >= 3) { clearInterval(poisonInterval); return; }
+        const dx = playerPos.x - this.mesh.position.x;
+        const dz = playerPos.z - this.mesh.position.z;
+        if (Math.sqrt(dx * dx + dz * dz) < 6.0) {
+          this.onPlayerHit(Math.floor(this.damage * 0.3));
+        }
+        ticks++;
+      }, 1000);
+    } else if (this._specialType === 'summon') {
+      // Summon: spawn 2 minions nearby (handled via callback in game.js)
+      if (this._onSummon) this._onSummon(this);
+    }
+  }
+
+  _updateHpBar(dist, camera) {
     if (dist < this.aggroRange * 1.4) {
       const p3 = this.mesh.position.clone();
       p3.y += (this.type === 'spider' ? 1.0 : this.type === 'bear' ? 2.2 : 1.5);
+      if (this.isBoss) p3.y += 0.8;
       const ndc = p3.project(camera);
       if (ndc.z < 1) {
         const sx = (ndc.x * 0.5 + 0.5) * window.innerWidth;
@@ -854,6 +1059,10 @@ class Enemy {
     if (this.dead) return;
     this.hp = Math.max(0, this.hp - amount);
     this._hpFill.style.width = (this.hp / this.maxHp * 100) + '%';
+    // Taking damage while returning cancels return (re-aggro)
+    if (this._returning) {
+      this._returning = false;
+    }
     if (this.hp === 0) {
       this.dead  = true;
       this.state = 'dead';
